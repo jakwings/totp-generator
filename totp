@@ -36,7 +36,7 @@ TOTP_PERIOD=$(( $(date +%s) / TOTP_INTERVAL ))
 
 gen_digest() {
   local key=$1 period=$2
-  printf "$(printf %016X "${period}" | sed 's/../\\x\0/g')" |
+  printf "$(printf %016X "${period}" | sed 's/../\\x&/g')" |
     openssl dgst -sha1 -mac HMAC -macopt "hexkey:${key}" |
       cut -d\  -f2
 }
