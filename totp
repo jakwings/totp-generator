@@ -49,7 +49,7 @@ gen_token() {
       [[ -z "${key}" ]] && exit 1
       # The digest is a 160-bit hexadecimal number string.
       local digest=$(gen_digest "${key}" "${period}")
-      [[ "${#digest}" -ne 40 ]] && exit 2
+      [[ ! "${digest}" =~ ^[0-9A-Fa-f]{40}$ ]] && exit 2
       # Read the last 4 bits and convert it into an unsigned integer.
       local offset=$(( $(printf %d "0x${digest:39}") * 2 ))
       # Read a 32-bit positive integer and take at most six rightmost digits.
