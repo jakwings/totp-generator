@@ -84,7 +84,7 @@ gen_digest() {
     hex_unpack |
       {
         # NUL is considered harmful. Avoid -hmac <binarykey>!
-        if [ -n "$(echo "${hexkey}" | sed -n 's/../_&/g; /_00*/p')" ]; then
+        if [ -n "$(echo "${hexkey}" | sed -n 's/../_&_/g; /_00*_/p')" ]; then
           openssl dgst -sha1 -mac hmac -macopt "hexkey:${hexkey}"
         else # especially for old versions from OSX/BSD!
           openssl dgst -sha1 -hmac "$(echo "${hexkey}" | hex_unpack)"
