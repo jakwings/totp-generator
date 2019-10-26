@@ -14,7 +14,7 @@ echo() {
 help() {
   echo "Time-based One-time Password Generator"
   echo
-  echo "USAGE: $(printf %q "$(basename -- "$0")") <key> [server] [interval]"
+  echo "USAGE: totp <key> [server] [interval]"
   echo
   echo "The default update interval is 30 seconds."
   echo
@@ -36,9 +36,9 @@ if [ ! "${TOTP_INTERVAL}" -gt 0 ] 2>&-; then
   echo "The update interval must be a positive integer: ${TOTP_INTERVAL}"
   echo
   help
+else # Remove leading zeros.
+  TOTP_INTERVAL=$(echo "${TOTP_INTERVAL}" | sed 's/^00*//')
 fi
-# Remove leading zeros.
-TOTP_INTERVAL=$(printf %d "${TOTP_INTERVAL}")
 
 TOTP_PERIOD=$(( ($(date +%s)) / TOTP_INTERVAL ))
 
@@ -54,22 +54,42 @@ hex_unpack() {
   if type xxd >&- 2>&-; then
     xxd -r -p
   else
-    for hh in $(tr -cd 0-9A-Fa-f | awk '{gsub(/../, "& ");print}'); do
-      if [ "${#hh}" -eq 2 ]; then
-        printf %b "\\0$(printf %03o "$(( 0x${hh} ))")"
-      else
-        return
-      fi
-    done
+    awk '
+    function hex2num(hex, num,map,len,i,c)
+    {
+      map = "123456789ABCDEF"
+      len = length(hex)
+      num = 0
+      for (i = 1; i <= len; i++) {
+        c = toupper(substr(hex, i, 1))
+        num = num * 16 + index(map, c)
+      }
+      return num
+    }
+
+    {
+      gsub(/[^0-9A-Fa-f]+/, " ")  # split digits by non-digit
+      gsub(/[0-9A-Fa-f]{2} */, "& ")  # group every two consecutive digits
+      gsub(/^ +| [^ ] | +[^ ]?$/, "")  # trim spaces and single digit groups
+      n = split($0, hh, " ")
+      for (i = 1; i <= n; i++) printf "%c", hex2num(hh[i])
+    }
+    '
   fi
 }
 
-# NUL is harmful to bash.
 gen_digest() {
   local hexkey=$1 period=$2
   printf %016X "${period}" |
     hex_unpack |
-      openssl dgst -sha1 -mac hmac -macopt "hexkey:${hexkey}" |
+      {
+        # NUL is considered harmful. Avoid -hmac <binarykey>!
+        if [ -n "$(echo "${hexkey}" | sed -n 's/../_&/g; /_00*/p')" ]; then
+          openssl dgst -sha1 -mac hmac -macopt "hexkey:${hexkey}"
+        else # especially for old versions from OSX/BSD!
+          openssl dgst -sha1 -hmac "$(echo "${hexkey}" | hex_unpack)"
+        fi
+      } |
         cut -d' ' -f2
 }
 
