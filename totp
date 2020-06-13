@@ -19,7 +19,7 @@ help() {
   echo "The default update interval is 30 seconds."
   echo
   echo "Supported servers: Google, GitHub, GitLab, Bitbucket"
-  exit -1
+  exit 1
 }
 
 TOTP_SECRET="$1"
@@ -100,13 +100,13 @@ gen_token() {
     # https://github.com/google/google-authenticator/wiki/Key-Uri-Format
     google | github | gitlab | bitbucket)
       local key="$(echo "${secret}" | base32 -d | hex_pack)"
-      [ -z "${key}" ] && exit 1
+      [ -z "${key}" ] && exit 2
       # The digest is a 160-bit hexadecimal number string.
       local digest="$(gen_digest "${key}" "${period}" | tr -cd 0-9A-Fa-f)"
-      [ "${#digest}" -ne 40 ] && exit 2
+      [ "${#digest}" -ne 40 ] && exit 3
       # Read the last 4 bits and convert it into an unsigned integer.
       local start="$(( (0x$(echo "${digest}" | cut -b 40)) * 2 + 1))"
-      [ "${start}" -gt 33 ] && exit 3
+      [ "${start}" -gt 33 ] && exit 4
       # Read a 32-bit positive integer and take at most six rightmost digits.
       local hexes="$(echo "${digest}" | cut -b "${start}-$(( start + 7 ))")"
       local token="$(( ((0x${hexes}) & 0x7FFFFFFF) % 1000000 ))"
