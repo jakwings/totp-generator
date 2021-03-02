@@ -1,49 +1,33 @@
 #!/bin/sh
 
-set -e
+set -euf
 
 # Before we get the token, redirect stdout to stderr.
 exec 3>&1 1>&2
 
-export LC_ALL=C
+LC_ALL=C
+export LC_ALL
 
+help() {
+  printf '%s' 'totp -- Time-based One-time Password Generator
+
+USAGE: totp <key> [server] [interval]
+
+The default update interval is 30 seconds.
+
+Supported servers: Google, GitHub, GitLab, Bitbucket
+'
+  exit 1
+}
 echo() {
   printf '%s\n' "$*"
 }
-
-help() {
-  echo "Time-based One-time Password Generator"
-  echo
-  echo "USAGE: totp <key> [server] [interval]"
-  echo
-  echo "The default update interval is 30 seconds."
-  echo
-  echo "Supported servers: Google, GitHub, GitLab, Bitbucket"
-  exit 1
+have() {
+  type "$1" >/dev/null 2>&1
 }
 
-TOTP_SECRET="$1"
-TOTP_SERVER="${2:-Google}"
-TOTP_INTERVAL="${3:-30}"
-
-if [ -z "${TOTP_SECRET}" ]; then
-  help
-fi
-TOTP_SECRET="$(echo "${TOTP_SECRET}" | tr -d ' ')"
-TOTP_SERVER="$(echo "${TOTP_SERVER}" | tr A-Z a-z)"
-
-if [ ! "${TOTP_INTERVAL}" -gt 0 ] 2>&-; then
-  echo "The update interval must be a positive integer: ${TOTP_INTERVAL}"
-  echo
-  help
-else # Remove leading zeros.
-  TOTP_INTERVAL="$(echo "${TOTP_INTERVAL}" | sed 's/^00*//')"
-fi
-
-TOTP_PERIOD="$(( ($(date +%s)) / TOTP_INTERVAL ))"
-
 hex_pack() {
-  if type xxd >&- 2>&-; then
+  if have xxd; then
     xxd -p | tr -cd 0-9A-Fa-f
   else
     od -A n -t x1 -v | tr -cd 0-9A-Fa-f
@@ -51,7 +35,7 @@ hex_pack() {
 }
 
 hex_unpack() {
-  if type xxd >&- 2>&-; then
+  if have xxd; then
     xxd -r -p
   else
     awk '
@@ -78,46 +62,65 @@ hex_unpack() {
   fi
 }
 
-gen_digest() {
-  local hexkey="$1" period="$2"
-  printf %016X "${period}" |
-    hex_unpack |
-      {
-        # NUL is considered harmful. Avoid -hmac <binarykey>!
-        if [ -n "$(echo "${hexkey}" | sed -n 's/../&_/g;/00_/p;/_0$/p')" ]; then
-          openssl dgst -sha1 -mac hmac -macopt "hexkey:${hexkey}"
-        else # especially for old versions from OSX/BSD!
-          openssl dgst -sha1 -hmac "$(echo "${hexkey}" | hex_unpack)"
-        fi
-      } |
-        cut -d' ' -f2
-}
+gen_digest() (
+  set -e
+  key="$1" period="$2"
+  printf '%016X' "${period}" | hex_unpack | {
+      # NUL is considered harmful. Avoid -hmac <binarykey>!
+      if [ -n "$(echo "${key}" | sed -n 's/../&_/g;/00_/p;/_0$/p')" ]; then
+        openssl dgst -sha1 -mac hmac -macopt "hexkey:${key}"
+      else # especially for old versions from OSX/BSD!
+        openssl dgst -sha1 -hmac "$(echo "${key}" | hex_unpack)"
+      fi
+    } | cut -d' ' -f2
+)
 
 # https://tools.ietf.org/html/rfc6238
-gen_token() {
-  local secret="$1" server="$2" period="$3"
+gen_token() (
+  set -e
+  secret="${1-}" server="${2-Google}" interval="${3-30}"
+
+  errmsg=''
+  if [ -z "${secret}" ]; then
+    errmsg="The secret token must not be empty!"
+  elif [ 0 -gt "${interval}" ]; then
+    errmsg="The update interval must be a positive integer!"
+  fi
+  if [ -n "${errmsg}" ]; then
+    printf '[totp] %s\n\n' "${errmsg}"
+    help
+  fi
+
+  server="$(echo "${server}" | tr A-Z a-z)"
+
+  # remove whitespace, number sign and leading zeros
+  interval="$(( ${interval#"${interval%%[1-9]*}"} + 0 ))"
+
+  now="$(date '+%s')"
+  period="$(( now / interval ))"
+
   case "${server}" in
     # https://github.com/google/google-authenticator/wiki/Key-Uri-Format
-    google | github | gitlab | bitbucket)
-      local key="$(echo "${secret}" | base32 -d | hex_pack)"
-      [ -z "${key}" ] && exit 2
+    (google|github|gitlab|bitbucket)
+      key="$(printf '%s' $secret | base32 -d | hex_pack)"
+      [ -n "${key}" ] || exit 2
       # The digest is a 160-bit hexadecimal number string.
-      local digest="$(gen_digest "${key}" "${period}" | tr -cd 0-9A-Fa-f)"
-      [ "${#digest}" -ne 40 ] && exit 3
+      digest="$(gen_digest "${key}" "${period}" | tr -cd 0-9A-Fa-f)"
+      [ 40 -eq "${#digest}" ] || exit 3
       # Read the last 4 bits and convert it into an unsigned integer.
-      local start="$(( (0x$(echo "${digest}" | cut -b 40)) * 2 + 1))"
-      [ "${start}" -gt 33 ] && exit 4
+      offset="0x$(echo "${digest}" | cut -b 40)"
+      offset="$(( offset * 2 + 1))"
+      [ 33 -gt "${offset}" ] || exit 4
       # Read a 32-bit positive integer and take at most six rightmost digits.
-      local hexes="$(echo "${digest}" | cut -b "${start}-$(( start + 7 ))")"
-      local token="$(( ((0x${hexes}) & 0x7FFFFFFF) % 1000000 ))"
+      number="0x$(echo "${digest}" | cut -b "${offset}-$(( offset + 7 ))")"
+      token="$(( (number & 0x7FFFFFFF) % 1000000 ))"
       # Pad the token number with leading zeros if needed.
       printf '%06d\n' "${token}" >&3
       ;;
-    *)
-      echo "Your server is not supported: ${server}"
-      echo
+    (*)
+      printf '[totp] %s\n\n' "Your server is not supported: ${server}"
       help
   esac
-}
+)
 
-gen_token "${TOTP_SECRET}" "${TOTP_SERVER}" "${TOTP_PERIOD}"
+gen_token ${1+"$@"}
