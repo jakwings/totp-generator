@@ -83,7 +83,7 @@ gen_token() (
   errmsg=''
   if [ -z "${secret}" ]; then
     errmsg="The secret token must not be empty!"
-  elif [ 0 -gt "${interval}" ]; then
+  elif [ 0 -ge "${interval}" ]; then
     errmsg="The update interval must be a positive integer!"
   fi
   if [ -n "${errmsg}" ]; then
@@ -110,7 +110,7 @@ gen_token() (
       # Read the last 4 bits and convert it into an unsigned integer.
       offset="0x$(echo "${digest}" | cut -b 40)"
       offset="$(( offset * 2 + 1))"
-      [ 33 -gt "${offset}" ] || exit 4
+      [ 33 -ge "${offset}" ] || exit 4
       # Read a 32-bit positive integer and take at most six rightmost digits.
       number="0x$(echo "${digest}" | cut -b "${offset}-$(( offset + 7 ))")"
       token="$(( (number & 0x7FFFFFFF) % 1000000 ))"
