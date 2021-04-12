@@ -1,5 +1,6 @@
 #!/bin/sh
 
+# XXX: http://www.in-ulm.de/~mascheck/various/set-e/
 set -euf
 
 # Before we get the token, redirect stdout to stderr.
@@ -11,7 +12,7 @@ export LC_ALL
 help() {
   printf '%s' 'totp -- Time-based One-time Password Generator
 
-USAGE: totp <key> [server] [interval]
+USAGE: totp [server] [interval] < secret
 
 The default update interval is 30 seconds.
 
@@ -78,7 +79,8 @@ gen_digest() (
 # https://tools.ietf.org/html/rfc6238
 gen_token() (
   set -e
-  secret="${1-}" server="${2-Google}" interval="${3-30}"
+  secret="$(cat)"
+  server="${1-Google}" interval="${2-30}"
 
   errmsg=''
   if [ -z "${secret}" ]; then
