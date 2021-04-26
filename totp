@@ -88,9 +88,11 @@ gen_token() (
 
   errmsg=''
   if [ -z "${secret}" ]; then
-    errmsg="The secret token must not be empty!"
+    errmsg="The secret token was empty!"
   elif [ 0 -ge "${interval}" ]; then
-    errmsg="The update interval must be a positive integer!"
+    errmsg="The interval could not be recognized as a positive integer!"
+  elif ! [ 0 -le "${now}" ] && ! [ 0 -ge "${now}" ]; then
+    errmsg="The timestamp could not be recognized as an integer!"
   fi
   if [ -n "${errmsg}" ]; then
     printf '[totp] %s\n\n' "${errmsg}"
@@ -99,8 +101,9 @@ gen_token() (
 
   server="$(echo "${server}" | tr A-Z a-z)"
 
-  # remove whitespace, number sign and leading zeros
+  # remove whitespace and leading zeros (and number sign)
   interval="$(( ${interval#"${interval%%[1-9]*}"} + 0 ))"
+  now="$(( ${now%%[0-9]*}${now#"${now%%[1-9]*}"} + 0 ))"
 
   period="$(( now / interval ))"
 
