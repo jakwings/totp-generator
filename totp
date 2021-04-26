@@ -12,9 +12,10 @@ export LC_ALL
 help() {
   printf '%s' 'totp -- Time-based One-time Password Generator
 
-USAGE: totp [server] [interval] < secret
+USAGE: totp [server] [interval] [timestamp] < secret
 
 The default update interval is 30 seconds.
+Timestamp is the seconds since 1970-01-01 00:00:00 UTC.
 
 Supported servers: Google, GitHub, GitLab, Bitbucket
 '
@@ -79,8 +80,11 @@ gen_digest() (
 # https://tools.ietf.org/html/rfc6238
 gen_token() (
   set -e
+  server="${1-Google}"
+  interval="${2-30}"
+  now="${3-$(date '+%s')}"
+
   secret="$(cat)"
-  server="${1-Google}" interval="${2-30}"
 
   errmsg=''
   if [ -z "${secret}" ]; then
@@ -98,7 +102,6 @@ gen_token() (
   # remove whitespace, number sign and leading zeros
   interval="$(( ${interval#"${interval%%[1-9]*}"} + 0 ))"
 
-  now="$(date '+%s')"
   period="$(( now / interval ))"
 
   case "${server}" in
