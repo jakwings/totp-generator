@@ -24,6 +24,9 @@ Supported servers: Google, GitHub, GitLab, Bitbucket
 echo() {
   printf '%s\n' "$*"
 }
+ekho() {
+  printf '[totp] %s\n\n' "$*"
+}
 have() {
   type "$1" >/dev/null 2>&1
 }
@@ -84,18 +87,22 @@ gen_token() (
   interval="${2-30}"
   now="${3-$(date '+%s')}"
 
+  if [ -t 0 ]; then
+    echo "Enter your secret token: (Press Ctrl-D to Quit)"
+  fi
   secret="$(cat)"
 
-  errmsg=''
+  err=''
   if [ -z "${secret}" ]; then
-    errmsg="The secret token was empty!"
-  elif [ 0 -ge "${interval}" ]; then
-    errmsg="The interval could not be recognized as a positive integer!"
-  elif ! [ 0 -le "${now}" ] && ! [ 0 -ge "${now}" ]; then
-    errmsg="The timestamp could not be recognized as an integer!"
+    ekho 'The secret token was empty!'; err=1
   fi
-  if [ -n "${errmsg}" ]; then
-    printf '[totp] %s\n\n' "${errmsg}"
+  if [ 0 -ge "${interval}" ]; then
+    ekho 'The interval could not be recognized as a positive integer!'; err=1
+  fi
+  if ! [ 0 -le "${now}" ] && ! [ 0 -ge "${now}" ]; then
+    ekho 'The timestamp could not be recognized as an integer!'; err=1
+  fi
+  if [ -n "${err}" ]; then
     help
   fi
 
@@ -126,7 +133,7 @@ gen_token() (
       printf '%06d\n' "${token}" >&3
       ;;
     (*)
-      printf '[totp] %s\n\n' "Your server is not supported: ${server}"
+      ekho "Your server is not supported: ${server}"
       help
   esac
 )
