@@ -28,7 +28,7 @@ ekho() {
   printf '[totp] %s\n\n' "$*"
 }
 have() {
-  type "$1" >/dev/null 2>&1
+  [ -x "$(command -v "$1" 2>/dev/null)" ]
 }
 
 hex_pack() {
